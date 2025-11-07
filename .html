@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>URL Snake — Single file</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    #game-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:2147483646}
+    #game{background:#111;border-radius:12px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:8px}
+    canvas{display:block;background:#0a0a0a;border-radius:6px}
+    .controls{color:#ddd;font-size:13px;display:flex;gap:12px;align-items:center}
+    .btn{background:#222;border:1px solid #333;color:#eee;padding:6px 10px;border-radius:8px;cursor:pointer}
+    .btn:hover{filter:brightness(1.2)}
+  </style>
+</head>
+<body>
+  <div id="game-wrap">
+    <div id="game">
+      <canvas id="c" width="360" height="360"></canvas>
+      <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+        <div class="controls">
+          <div id="score">Score: 0</div>
+          <div style="width:14px"></div>
+          <div id="hint">Arrows / WASD to move • Esc to quit</div>
+        </div>
+        <div>
+          <button class="btn" id="restart">Restart</button>
+          <button class="btn" id="close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Simple snake game that can be copied into a bookmarklet or saved as an HTML file.
+(() => {
+  const wrap = document.getElementById('game-wrap');
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const restartBtn = document.getElementById('restart');
+  const closeBtn = document.getElementById('close');
+
+  const CELL = 18;                // grid cell size
+  const COLS = Math.floor(canvas.width / CELL);
+  const ROWS = Math.floor(canvas.height / CELL);
+
+  let snake = [{x: Math.floor(COLS/2), y: Math.floor(ROWS/2)}];
+  let dir = {x:1,y:0};
+  let food = null;
+  let alive = true;
+  let score = 0;
+  let tickMs = 120;
+  let lastTick = 0;
+
+  function placeFood(){
+    while(true){
+      const f = {x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS)};
+      if(!snake.some(s=>s.x===f.x && s.y===f.y)){ food = f; break; }
+    }
+  }
+
+  function reset(){
+    snake = [{x: Math.floor(COLS/2), y: Math.floor(ROWS/2)}];
+    dir = {x:1,y:0};
+    score = 0; alive = true; tickMs = 120; placeFood(); updateScore();
+  }
+
+  function updateScore(){ scoreEl.textContent = 'Score: ' + score; }
+
+  function step(){
+    if(!alive) return;
+    const head = {x: (snake[0].x + dir.x + COLS) % COLS, y: (snake[0].y + dir.y + ROWS) % ROWS};
+    // collision with self
+    if(snake.some(s=>s.x===head.x && s.y===head.y)) { alive=false; return; }
+    snake.unshift(head);
+    if(food && head.x===food.x && head.y===food.y){ score++; placeFood(); tickMs = Math.max(40, tickMs - 3); updateScore(); }
+    else snake.pop();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // grid subtle
+    ctx.fillStyle = '#070707';
+    for(let x=0;x<COLS;x++) for(let y=0;y<ROWS;y++){
+      // optional: draw tiny squares
+    }
+
+    // draw food
+    if(food){ ctx.fillStyle = '#ff4d4d'; ctx.fillRect(food.x*CELL+2, food.y*CELL+2, CELL-4, CELL-4); }
+
+    // draw snake
+    for(let i=0;i<snake.length;i++){
+      const s = snake[i];
+      const t = i===0 ? '#98ff98' : '#3fe07f';
+      ctx.fillStyle = t;
+      ctx.fillRect(s.x*CELL+1, s.y*CELL+1, CELL-2, CELL-2);
+    }
+
+    if(!alive){
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, canvas.height/2 - 30, canvas.width, 60);
+      ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.font='20px system-ui'; ctx.fillText('Game Over — press Restart', canvas.width/2, canvas.height/2+8);
+    }
+  }
+
+  function loop(ts){
+    if(!lastTick) lastTick = ts;
+    if(ts - lastTick >= tickMs){ step(); lastTick = ts; }
+    draw();
+    if(alive) requestAnimationFrame(loop);
+  }
+
+  function handleKey(e){
+    const code = e.key;
+    if(code === 'Escape'){ destroy(); }
+    const map = {ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0]};
+    if(map[code]){
+      const [x,y] = map[code];
+      // prevent immediate reverse
+      if(snake.length>1 && snake[1].x === (snake[0].x + x) && snake[1].y === (snake[0].y + y)) return;
+      dir = {x, y};
+      e.preventDefault();
+    }
+  }
+
+  function destroy(){
+    window.removeEventListener('keydown', handleKey);
+    restartBtn.removeEventListener('click', resetAndLoop);
+    closeBtn.removeEventListener('click', destroyAndCleanup);
+    if(wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+  }
+
+  function destroyAndCleanup(){ destroy(); }
+
+  function resetAndLoop(){ reset(); if(!alive) alive = true; lastTick = 0; requestAnimationFrame(loop); }
+
+  // wire up
+  window.addEventListener('keydown', handleKey);
+  restartBtn.addEventListener('click', resetAndLoop);
+  closeBtn.addEventListener('click', destroyAndCleanup);
+
+  reset(); requestAnimationFrame(loop);
+
+  // expose for debug if loaded as script
+  window.__URL_SNAKE = {reset, destroy};
+})();
+</script>
+
+<!-- Bookmarklet usage: copy the entire minified JS below into a bookmark URL slot (prefix with javascript:) -->
+<!-- Example bookmarklet (shortened for readability in the file). For the real bookmarklet, copy the minified injection code from below. -->
+
+</body>
+</html>
